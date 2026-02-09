@@ -2,34 +2,38 @@
 #define TENSOR_HPP
 
 #include <vector>
-#include <cstddef>
+#include <functional>
+#include <memory>
 #include <string>
 
-class Tensor {
-public:
-    // --- Constructors ---
-    Tensor();
-    Tensor(const std::vector<int>& shape, bool requires_grad = false);
-    Tensor(const std::vector<float>& data,
-           const std::vector<int>& shape,
-           bool requires_grad = false);
+class Tensor;
+using TensorPtr = std::shared_ptr<Tensor>;
 
-    // --- Core data ---
+class Tensor : public std::enable_shared_from_this<Tensor> {
+public:
     std::vector<float> data;
     std::vector<float> grad;
     std::vector<int> shape;
     bool requires_grad;
 
-    // --- Shape helpers ---
-    int ndim() const;
-    int size() const;
+    std::vector<TensorPtr> parents;
+    std::function<void()> backward_fn;
 
-    // --- Gradient helpers ---
+    // Constructors
+    Tensor(); // Default
+    Tensor(const std::vector<int>& shape, bool requires_grad=false);
+    Tensor(const std::vector<float>& data, const std::vector<int>& shape, bool requires_grad=false);
+
+    int size() const;
+    int ndim() const;
     void zero_grad();
     bool has_grad() const;
-
-    // --- Utility ---
     std::string shape_str() const;
 };
 
-#endif // TENSOR_HPP
+// Factory helper
+inline TensorPtr create_tensor(const std::vector<int>& shape, bool requires_grad=false) {
+    return std::make_shared<Tensor>(shape, requires_grad);
+}
+
+#endif

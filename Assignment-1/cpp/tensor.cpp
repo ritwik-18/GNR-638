@@ -33,7 +33,7 @@ Tensor::Tensor(const std::vector<float>& data_,
     }
 }
 
-// -------- Shape helpers --------
+// -------- Helpers --------
 
 int Tensor::ndim() const {
     return static_cast<int>(shape.size());
@@ -44,8 +44,6 @@ int Tensor::size() const {
     return std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
 }
 
-// -------- Gradient helpers --------
-
 void Tensor::zero_grad() {
     if (requires_grad) {
         std::fill(grad.begin(), grad.end(), 0.0f);
@@ -55,8 +53,6 @@ void Tensor::zero_grad() {
 bool Tensor::has_grad() const {
     return requires_grad && !grad.empty();
 }
-
-// -------- Utility --------
 
 std::string Tensor::shape_str() const {
     std::ostringstream oss;
