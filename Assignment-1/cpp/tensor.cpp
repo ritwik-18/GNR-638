@@ -2,9 +2,7 @@
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
-
 // -------- Constructors --------
-
 Tensor::Tensor()
     : requires_grad(false) {}
 
@@ -18,7 +16,6 @@ Tensor::Tensor(const std::vector<int>& shape_, bool requires_grad_)
         grad.resize(total, 0.0f);
     }
 }
-
 Tensor::Tensor(const std::vector<float>& data_,
                const std::vector<int>& shape_,
                bool requires_grad_)

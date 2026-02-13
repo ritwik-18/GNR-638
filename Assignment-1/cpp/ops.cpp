@@ -129,24 +129,35 @@ TensorPtr sum(TensorPtr x) {
 }
 
 TensorPtr flatten(TensorPtr x) {
-    // No-op flatten for now
     auto out = create_tensor({x->size()}, x->requires_grad);
     out->data = x->data;
-    out->parents = {x};
-    out->backward_fn = [x, out]() {
-        for (size_t i = 0; i < x->grad.size(); ++i)
-            x->grad[i] += out->grad[i];
-    };
+    if (out->requires_grad) {
+        out->parents = {x};
+        std::weak_ptr<Tensor> weak_out = out;
+        out->backward_fn = [x, weak_out]() {
+            auto pout = weak_out.lock();
+            if (!pout) return;
+            for (size_t i = 0; i < x->grad.size(); ++i)
+                x->grad[i] += pout->grad[i];
+        };
+    }
     return out;
 }
-
 TensorPtr reshape(TensorPtr x, const std::vector<int>& shape) {
+    int total = 1;
+    for(int s : shape) total *= s;
+    if(total != x->size()) throw std::runtime_error("reshape: size mismatch");
     auto out = create_tensor(shape, x->requires_grad);
     out->data = x->data;
-    out->parents = {x};
-    out->backward_fn = [x, out]() {
-        for (size_t i = 0; i < x->grad.size(); ++i)
-            x->grad[i] += out->grad[i];
-    };
+    if (out->requires_grad) {
+        out->parents = {x};
+        std::weak_ptr<Tensor> weak_out = out;
+        out->backward_fn = [x, weak_out]() {
+            auto pout = weak_out.lock();
+            if (!pout) return;
+            for (size_t i = 0; i < x->grad.size(); ++i)
+                x->grad[i] += pout->grad[i];
+        };
+    }
     return out;
 }

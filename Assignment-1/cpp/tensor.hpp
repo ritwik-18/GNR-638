@@ -5,7 +5,9 @@
 #include <functional>
 #include <memory>
 #include <string>
-
+#include <numeric> 
+#include <sstream>
+#include <stdexcept>
 class Tensor;
 using TensorPtr = std::shared_ptr<Tensor>;
 

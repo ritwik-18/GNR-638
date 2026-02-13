@@ -1,63 +1,77 @@
 #include "nn.hpp"
 #include "ops.hpp"
 #include <stdexcept>
+#include <random>
 
 // ====================
 // Linear
 // ====================
 Linear::Linear(int in_features, int out_features) {
-    // Initialize pointers using make_shared
-    weight = std::make_shared<Tensor>(std::vector<int>{in_features, out_features}, true);
-    bias = std::make_shared<Tensor>(std::vector<int>{out_features}, true);
 
-    // Init
-    for (int i = 0; i < weight->size(); ++i) weight->data[i] = 0.01f;
-    for (int i = 0; i < bias->size(); ++i) bias->data[i] = 0.0f;
+    weight = std::make_shared<Tensor>(
+        std::vector<int>{in_features, out_features}, true);
+
+    bias = std::make_shared<Tensor>(
+        std::vector<int>{out_features}, true);
+
+    static std::mt19937 gen(42);
+    static std::uniform_real_distribution<float> dist(-0.1f,0.1f);
+
+    for(int i=0;i<weight->size();++i)
+        weight->data[i]=dist(gen);
+
+    for(int i=0;i<bias->size();++i)
+        bias->data[i]=0.f;
 }
 
 TensorPtr Linear::forward(TensorPtr x) {
-    // Assume matmul returns TensorPtr
+
+    // 1️⃣ matmul builds graph correctly (parents = {x, weight})
     TensorPtr out = matmul(x, weight);
 
     int batch = x->shape[0];
     int out_features = bias->shape[0];
 
-    // Add bias
+    // 2️⃣ Add bias (forward only)
     for (int i = 0; i < batch; ++i) {
         for (int j = 0; j < out_features; ++j) {
             out->data[i * out_features + j] += bias->data[j];
         }
     }
 
+    // 3️⃣ Attach bias backward WITHOUT touching parents
     if (bias->requires_grad) {
+
         std::weak_ptr<Tensor> weak_out = out;
         TensorPtr pb = bias;
-        
-        // Save existing backward function
-        auto old_backward = out->backward_fn;
-        
-        // Add bias to parents
-        out->parents.push_back(pb);
 
-        out->backward_fn = [old_backward, pb, weak_out, batch, out_features]() {
+        auto old_backward = out->backward_fn;
+
+        out->backward_fn =
+        [old_backward, pb, weak_out, batch, out_features]() {
+
+            // First run matmul backward (VERY IMPORTANT)
             if (old_backward) old_backward();
 
             auto pout = weak_out.lock();
             if (!pout) return;
 
+            // Compute bias gradient
             for (int j = 0; j < out_features; ++j) {
-                float grad_sum = 0.0f;
-                for (int i = 0; i < batch; ++i) {
-                    grad_sum += pout->grad[i * out_features + j];
-                }
-                if (pb->requires_grad)
-                     pb->grad[j] += grad_sum;
+
+                float grad_sum = 0.f;
+
+                for (int i = 0; i < batch; ++i)
+                    grad_sum += pout->grad[i*out_features + j];
+
+                pb->grad[j] += grad_sum;
             }
         };
     }
 
     return out;
 }
+
 
 std::vector<TensorPtr> Linear::parameters() {
     return { weight, bias };
