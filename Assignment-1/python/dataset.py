@@ -56,20 +56,25 @@ class ImageFolder:
 
         for path, label in batch_samples:
 
-            img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+            img = cv2.imread(path)  # Load color image
 
             if img is None:
-                flat_pixels.extend([0.0] * (h * w))
+                flat_pixels.extend([0.0] * (3 * h * w))
                 flat_labels.append(float(label))
                 continue
 
             img = cv2.resize(img, (w, h))
-            pixels = [p / 255.0 for p in img.flatten()]
+            img = img.astype(float) / 255.0
 
-            flat_pixels.extend(pixels)
+            # Convert HWC → CHW manually (no NumPy allowed)
+            for c in range(3):
+                for i in range(h):
+                    for j in range(w):
+                        flat_pixels.append(float(img[i][j][c]))
+
             flat_labels.append(float(label))
 
-        shape = df.IntVector([actual_bs, 1, h, w])
+        shape = df.IntVector([actual_bs, 3, h, w])
         x = df.create_tensor(shape, False)
 
         label_shape = df.IntVector([actual_bs])

@@ -1,5 +1,5 @@
 import time
-import deep_framework as df
+import deep_framework as df 
 import sys
 from dataset import ImageFolder
 from model import MyCNN
@@ -13,8 +13,8 @@ else:
     TRAIN_DIR = "./Assignments 1 Datasets/Train"
 
 BATCH_SIZE = 64
-EPOCHS = 20
-LR = 0.001
+EPOCHS = 100
+LR = 0.05
 SAVE_PATH = "model_final.pkl"
 
 
@@ -22,28 +22,31 @@ SAVE_PATH = "model_final.pkl"
 # 2. Complexity Reporting (Dynamic)
 # ==========================================
 def report_complexity(num_classes):
+
+    # Conv1
+    p_c1 = (16 * 3 * 5 * 5) + 16
+    m_c1 = (5 * 5 * 3 * 28 * 28) * 16
+
+    # Conv2
+    p_c2 = (32 * 16 * 3 * 3) + 32
+    m_c2 = (3 * 3 * 16 * 12 * 12) * 32
+
+    # FC
+    p_fc1 = (1152 * num_classes) + num_classes
+    m_fc1 = 1152 * num_classes
+
+    total_params = p_c1 + p_c2 + p_fc1
+    total_macs = m_c1 + m_c2 + m_fc1
+    total_flops = 2 * total_macs
+
     print("\n" + "="*40)
     print("      MODEL COMPLEXITY REPORT")
     print("="*40)
-
-    # Conv2D (1 → 6, 5x5)
-    p_c1 = (6 * 1 * 5 * 5) + 6
-    m_c1 = (5 * 5 * 1 * 28 * 28) * 6
-
-    # Linear (1176 → num_classes)
-    p_fc1 = (1176 * num_classes) + num_classes
-    m_fc1 = 1176 * num_classes
-
-    total_params = p_c1 + p_fc1
-    total_macs = m_c1 + m_fc1
-    total_flops = 2 * total_macs
-
-    print("Model Architecture: Conv(5x5)->ReLU->Pool(2x2)->FC")
-    print(f"Total Trainable Parameters: {total_params}")
-    print(f"Total MACs per Inference:   {total_macs}")
-    print(f"Total FLOPs per Inference:  {total_flops}")
+    print("Architecture: Conv→Pool→Conv→Pool→FC")
+    print(f"Total Parameters: {total_params}")
+    print(f"Total MACs: {total_macs}")
+    print(f"Total FLOPs: {total_flops}")
     print("="*40 + "\n")
-
 
 # ==========================================
 # 3. Training Loop
@@ -68,7 +71,7 @@ def main():
     # --------------------------------------
     print("Initializing Network...")
     model = MyCNN(num_classes)
-    optimizer = df.Adam(model.parameters(), LR)
+    optimizer = df.SGD(model.parameters(), LR)
 
     # Report Complexity AFTER knowing num_classes
     report_complexity(num_classes)
@@ -108,7 +111,9 @@ def main():
             total_loss += loss.data[0]
 
             # 5️⃣ Accuracy (dynamic classes)
-            for b in range(logits.shape[0]):
+            batch_size = int(y.shape[0])
+
+            for b in range(batch_size):
                 row = list(
                     logits.data[b*num_classes : (b+1)*num_classes]
                 )

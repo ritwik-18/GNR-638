@@ -54,7 +54,8 @@ def evaluate(test_dir, weight_path):
 
         logits = model.forward(x)
 
-        for b in range(logits.shape[0]):
+        batch_size = int(y.shape[0])
+        for b in range(batch_size):
             row = list(
                 logits.data[b*num_classes : (b+1)*num_classes]
             )
