@@ -8,7 +8,7 @@
 #include <functional>
 #include <algorithm>
 #include <memory>   // For std::shared_ptr
-
+#include<iostream>
 // =========================================================
 // THREADING ENGINE: Custom Parallel For Loop
 // =========================================================

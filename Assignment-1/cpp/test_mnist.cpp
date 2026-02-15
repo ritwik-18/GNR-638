@@ -148,7 +148,7 @@ int main(){
     float lr = 0.05f;
 
     // ⭐ NEW OPTIMIZER
-    SGD optimizer(params, lr);
+    Adam Optimizer(params, lr);
 
     // =================================================
     // TRAIN LOOP
@@ -191,9 +191,9 @@ int main(){
             seen += bs;
 
             // ⭐ NEW OPTIMIZER FLOW
-            optimizer.zero_grad();
+            Optimizer.zero_grad();
             backward(loss);
-            optimizer.step();
+            Optimizer.step();
         }
 
         std::cout

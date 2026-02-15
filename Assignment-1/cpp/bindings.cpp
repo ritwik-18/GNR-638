@@ -71,9 +71,10 @@ PYBIND11_MODULE(deep_framework, m) {
     // ---------------------------------------
     
     // Base Module
-    py::class_<Module, std::shared_ptr<Module>>(m, "Module")
-        .def("forward", &Module::forward)
-        .def("parameters", &Module::parameters);
+    py::class_<Module, std::shared_ptr<Module>>(m, "Module") 
+    .def("forward", &Module::forward)
+    .def("parameters", &Module::parameters);
+
 
     // Linear
     py::class_<Linear, Module, std::shared_ptr<Linear>>(m, "Linear")
@@ -115,7 +116,16 @@ PYBIND11_MODULE(deep_framework, m) {
         .def("step", &Optimizer::step)
         .def("zero_grad", &Optimizer::zero_grad);
 
-    py::class_<SGD, Optimizer, std::shared_ptr<SGD>>(m, "SGD")
-        .def(py::init<const std::vector<TensorPtr>&, float>(),
-             py::arg("parameters"), py::arg("lr"));
+    py::class_<Adam, Optimizer, std::shared_ptr<Adam>>(m, "Adam")
+    .def(py::init<const std::vector<TensorPtr>&,
+                  float,
+                  float,
+                  float,
+                  float>(),
+         py::arg("parameters"),
+         py::arg("lr") = 0.001f,
+         py::arg("beta1") = 0.9f,
+         py::arg("beta2") = 0.999f,
+         py::arg("eps") = 1e-8f);
+
 }   
