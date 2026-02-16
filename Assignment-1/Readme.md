@@ -1,592 +1,132 @@
 # 🔥 Custom Autograd + CNN Framework
 
-## 📘 COMPLETE IMPLEMENTATION README
+## 📘 Project Overview
 
-This README is the **single implementation contract** for the entire project.
-It specifies **exactly what must be written in every file**, what responsibilities each file has, and how all components connect.
+This project implements a **custom deep learning framework from scratch**
+using a C++ backend and a Python frontend.  
+The framework supports **automatic differentiation, CNNs, training, and evaluation**
+without relying on external deep learning libraries such as PyTorch or TensorFlow.
 
-The framework is built in strict layers:
+The design follows a strict layered architecture:
 
-```
 Tensor Storage → Autograd Engine → Tensor Ops → NN Layers → Python Bindings → Training Pipeline
-```
-
-⚠️ **Golden Rule:**
-Never implement CNN layers before Tensor + Autograd + Basic Ops are working.
 
 ---
 
-# 📁 PROJECT STRUCTURE
+## 📁 Project Structure
 
-```
 cpp/
- ├── tensor.hpp
- ├── tensor.cpp
- ├── autograd.hpp
- ├── autograd.cpp
- ├── ops.hpp
- ├── ops.cpp
- ├── nn.hpp
- ├── nn.cpp
- └── bindings.cpp
+├── tensor.hpp
+├── tensor.cpp
+├── autograd.hpp
+├── autograd.cpp
+├── ops.hpp
+├── ops.cpp
+├── nn.hpp
+├── nn.cpp
+├── cnn.hpp
+├── cnn.cpp
+└── bindings.cpp
 
 python/
- ├── framework.py
- ├── dataset.py
- ├── model.py
- ├── train.py
- └── evaluate.py
-```
+├── framework.py
+├── dataset.py
+├── model.py
+├── train.py
+└── evaluate.py
+
 
 ---
 
-# 🧱 C++ IMPLEMENTATION
+## 🧱 C++ Backend
+
+### tensor.hpp / tensor.cpp
+- Defines the core `Tensor` abstraction
+- Stores data, gradients, shape, and autograd metadata
+- Uses `std::shared_ptr` to safely manage tensor lifetimes
+- No mathematical operations are implemented here
+
+### autograd.hpp / autograd.cpp
+- Implements reverse-mode automatic differentiation
+- Builds a computation graph dynamically during forward pass
+- Performs backpropagation using topological sorting
+
+### ops.hpp / ops.cpp
+Implements tensor operations with full backward support:
+- Elementwise operations (add, ReLU)
+- Matrix multiplication
+- Convolution and max pooling
+- Flatten and reshape
+
+Each operation:
+- Creates an output tensor
+- Records parent tensors
+- Defines a backward lambda for gradient propagation
+
+### nn.hpp / nn.cpp
+Defines high-level neural network abstractions:
+- `Module` base class
+- `Linear`, `ReLU`, `Sequential`
+- CNN layers delegate computation to tensor ops
+
+### cnn.hpp / cnn.cpp
+- Implements `Conv2D` and `MaxPool` layers
+- Uses naive convolution and pooling for clarity and correctness
+- Fully supports backward propagation
+
+### optim.hpp / optim.cpp
+- Implements **Stochastic Gradient Descent (SGD)**
+- Updates parameters using gradients computed by autograd
+
+### bindings.cpp
+- Exposes the C++ framework to Python using **pybind11**
+- Exports tensors, layers, loss, optimizer, and utility functions
 
 ---
 
-# ✅ tensor.hpp
+## 🐍 Python Frontend
 
-## Purpose
+### framework.py
+- Thin wrapper that imports the compiled C++ extension
 
-Defines the **Tensor container**.
-Only storage + interface declarations live here.
+### dataset.py
+- Loads image datasets from folders
+- Resizes images to 32×32
+- Normalizes pixel values
+- Converts data into framework tensors
+- Supports mini-batch loading
+- Measures dataset loading time
 
-## MUST DEFINE
+### model.py
+- Defines the CNN architecture using exposed C++ layers
+- No training logic included
 
-### Class
+### train.py
+- Loads dataset
+- Builds the model
+- Prints parameter count and FLOPs
+- Trains the model using SGD
+- Saves trained weights
 
-```
-class Tensor
-```
-
-### Data Members
-
-```
-vector<float> data;
-vector<float> grad;
-vector<int> shape;
-
-bool requires_grad;
-
-vector<Tensor*> parents;
-function<void()> backward_fn;
-```
-
-### Method Declarations
-
-```
-Tensor(vector<int> shape, bool requires_grad=false);
-int numel() const;
-void zero_grad();
-```
-
-## MUST NOT CONTAIN
-
-* math operations
-* backward traversal logic
+### evaluate.py
+- Loads trained weights
+- Runs inference on test data
+- Computes and prints accuracy
 
 ---
 
-# ✅ tensor.cpp
+## ⚙️ Build Instructions
 
-## Purpose
+From the `cpp/` directory:
 
-Implements tensor storage utilities.
+```bash
+g++ -O3 -Wall -shared -std=c++17 -fPIC \
+$(python3 -m pybind11 --includes) \
+tensor.cpp autograd.cpp ops.cpp nn.cpp cnn.cpp \
+loss.cpp optim.cpp bindings.cpp \
+-o ../python/deep_framework$(python3-config --extension-suffix)
 
-## MUST IMPLEMENT
 
-```
-Tensor constructor → allocate data + grad
-int numel()
-void zero_grad()
-reshape helper
-indexing helper (flat indexing)
-```
+python3 train.py ./data_1
 
-## Includes
-
-```
-#include "tensor.hpp"
-```
-
----
-
-# 🧠 autograd.hpp
-
-## Purpose
-
-Declares the gradient engine.
-
-## MUST DECLARE
-
-```
-void backward(Tensor& loss);
-void topo_sort(Tensor* node, vector<Tensor*>& graph);
-```
-
-No implementation here.
-
----
-
-# 🧠 autograd.cpp
-
-## Purpose
-
-Executes backward propagation through computation graph.
-
-## MUST IMPLEMENT
-
-### topo_sort
-
-* DFS through `parents`
-* Build ordered graph list
-
-### backward
-
-```
-loss.grad = 1
-create topo order
-iterate reversed order
-if backward_fn exists → call it
-```
-
-## Includes
-
-```
-tensor.hpp
-autograd.hpp
-```
-
----
-
-# ⚙️ ops.hpp
-
-## Purpose
-
-Declare all tensor operations.
-
-## MUST DECLARE
-
-### PHASE A — Core Ops
-
-```
-Tensor add(const Tensor&, const Tensor&);
-Tensor relu(const Tensor&);
-```
-
-### PHASE B — Linear Algebra
-
-```
-Tensor matmul(const Tensor&, const Tensor&);
-Tensor flatten(const Tensor&);
-Tensor reshape(const Tensor&, vector<int>);
-```
-
-### PHASE C — CNN Ops
-
-```
-Tensor conv2d(...);
-Tensor maxpool(...);
-```
-
-No implementations here.
-
----
-
-# ⚙️ ops.cpp
-
-## Purpose
-
-Implements all mathematical operations + autograd behavior.
-
-Every op MUST:
-
-```
-create output Tensor
-assign parents
-define backward_fn lambda
-```
-
----
-
-## PHASE A — CORE
-
-Implement:
-
-```
-add forward
-add backward_fn
-
-relu forward
-relu backward_fn
-```
-
----
-
-## PHASE B — LINEAR
-
-Implement:
-
-```
-matmul forward/backward
-flatten
-reshape
-```
-
----
-
-## PHASE C — CNN (NAIVE)
-
-Implement:
-
-```
-conv2d forward/backward
-maxpool forward/backward
-```
-
-⚠️ Use simple loops. No optimizations required.
-
----
-
-# 🧩 nn.hpp
-
-## Purpose
-
-High-level neural network abstraction.
-
-## MUST DEFINE
-
-### Base Class
-
-```
-class Module {
-public:
-    virtual Tensor forward(Tensor x)=0;
-};
-```
-
-### Layers
-
-```
-class Linear;
-class ReLU;
-class Sequential;
-class Conv2D;
-class MaxPool;
-```
-
-### Training Components
-
-```
-class SGD;
-Tensor cross_entropy(Tensor logits, Tensor targets);
-```
-
-### Metrics
-
-```
-size_t count_parameters(Module&);
-size_t compute_flops(Module&);
-```
-
----
-
-# 🧩 nn.cpp
-
-## Purpose
-
-Implements neural network layers using ops.
-
----
-
-## PHASE A — BASIC NN
-
-Implement:
-
-```
-Linear::forward → matmul + add
-ReLU::forward → relu
-Sequential::forward → sequential execution
-```
-
----
-
-## PHASE B — CNN WRAPPERS
-
-Implement:
-
-```
-Conv2D::forward → call conv2d op
-MaxPool::forward → call maxpool op
-```
-
-Do NOT write math here.
-
----
-
-## PHASE C — TRAINING LOGIC
-
-Implement:
-
-```
-cross_entropy forward/backward
-SGD optimizer step()
-```
-
----
-
-## PHASE D — METRICS
-
-Implement:
-
-```
-count_parameters(Module&)
-compute_flops(Module&)
-```
-
----
-
-# 🔗 bindings.cpp
-
-## Purpose
-
-Expose C++ API to Python using pybind11.
-
----
-
-## FIRST VERSION EXPORTS
-
-```
-Tensor
-Linear
-Sequential
-backward
-```
-
----
-
-## FINAL VERSION EXPORTS
-
-```
-Conv2D
-MaxPool
-SGD
-cross_entropy
-count_parameters
-compute_flops
-```
-
-## Includes
-
-```
-tensor.hpp
-nn.hpp
-autograd.hpp
-```
-
----
-
-# 🐍 PYTHON IMPLEMENTATION
-
----
-
-# 🐍 framework.py
-
-## Purpose
-
-Thin wrapper around compiled module.
-
-## MUST CONTAIN
-
-```
-import deepframework_cpp
-```
-
-Optional aliases allowed.
-
-No training logic here.
-
----
-
-# 🐍 dataset.py
-
-## Purpose
-
-Load and preprocess images.
-
-## MUST IMPLEMENT
-
-```
-load_dataset(folder_path)
-infer_labels()
-resize_to_32x32()
-to_tensor()
-batch_loader()
-measure_loading_time()
-```
-
-Responsibilities:
-
-* read images
-* assign labels
-* batching
-* timing dataset loading
-
----
-
-# 🧠 model.py
-
-## Purpose
-
-Define CNN architecture.
-
-## MUST USE
-
-```
-Conv2D
-ReLU
-MaxPool
-Flatten
-Linear
-```
-
-Only define model structure.
-No training loop.
-
----
-
-# 🚀 train.py
-
-## Purpose
-
-Training pipeline.
-
-## MUST PERFORM
-
-```
-load dataset
-build model
-print parameter count
-print FLOPs
-create SGD optimizer
-training loop:
-    forward
-    loss
-    backward
-    optimizer.step()
-save weights
-```
-
----
-
-# 📊 evaluate.py
-
-## Purpose
-
-Evaluation script.
-
-## MUST PERFORM
-
-```
-load weights
-forward pass
-compute accuracy
-print metrics
-```
-
-Script must run without modifying code.
-
----
-
-# 🔗 STRICT DEPENDENCY FLOW
-
-```
-tensor → autograd → ops → nn → bindings → python
-```
-
-Never reverse this order.
-
----
-
-# 👥 TEAM OWNERSHIP
-
-## 👤 Engineer A — Core Engine
-
-Creates:
-
-```
-tensor.hpp
-tensor.cpp
-autograd.hpp
-autograd.cpp
-ops.hpp
-ops.cpp
-```
-
----
-
-## 👤 Engineer B — Neural Network System
-
-Creates:
-
-```
-nn.hpp
-nn.cpp
-```
-
----
-
-## 👤 Engineer C — Python Integration
-
-Creates:
-
-```
-bindings.cpp
-framework.py
-dataset.py
-model.py
-train.py
-evaluate.py
-```
-
----
-
-# 🧨 FINAL IMPLEMENTATION CHECKLIST
-
-## C++
-
-* Tensor container
-* Backward engine
-* add / relu / matmul ops
-* conv2d / maxpool ops
-* Module abstraction
-* Linear / Sequential layers
-* Conv2D / MaxPool layers
-* cross_entropy loss
-* SGD optimizer
-* Metrics
-* Python bindings
-
-## Python
-
-* Framework wrapper
-* Dataset loader
-* CNN model definition
-* Training pipeline
-* Evaluation script
-
----
-
-# 🎯 FINAL GOAL
-
-After implementing all files, the framework must support:
-
-```
-Custom Tensor Autograd
-CNN Forward + Backward
-Python Training Interface
-Metrics Reporting
-```
-
-Follow this README strictly to prevent circular dependencies and architectural issues.
-
+python3 evaluate.py ./data_1 model_final.pkl

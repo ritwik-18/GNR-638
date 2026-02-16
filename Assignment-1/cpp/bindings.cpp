@@ -72,7 +72,7 @@ PYBIND11_MODULE(deep_framework, m) {
     
     // Base Module
     py::class_<Module, std::shared_ptr<Module>>(m, "Module")
-    .def(py::init<>())
+    
     .def("forward", &Module::forward)
     .def("parameters", &Module::parameters);
 
