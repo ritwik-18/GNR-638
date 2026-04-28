@@ -132,22 +132,47 @@ class Sandbox:
 
 def extract_code_block(text: str) -> Optional[str]:
     """
-    Pull the first ```python ... ``` block out of model output.
-    Falls back to raw text if no fences found.
+    Pull executable Python code out of model output.
+    Tries multiple strategies in order of reliability.
     """
-    # Fenced block
-    m = re.search(r"```(?:python)?\s*\n(.*?)```", text, re.DOTALL)
+    # Strategy 1: standard ```python ... ``` fence
+    m = re.search(r"```python\s*\n(.*?)```", text, re.DOTALL)
     if m:
         return m.group(1).strip()
 
-    # Indented block heuristic: starts with 'import' or 'model = '
+    # Strategy 2: generic ``` ... ``` fence (no language tag)
+    m = re.search(r"```\s*\n(.*?)```", text, re.DOTALL)
+    if m:
+        candidate = m.group(1).strip()
+        if any(kw in candidate for kw in ["import", "torch", "nn.", "print"]):
+            return candidate
+
+    # Strategy 3: fence without newline after backticks  ```python<code>```
+    m = re.search(r"```(?:python)?(.*?)```", text, re.DOTALL)
+    if m:
+        candidate = m.group(1).strip()
+        if any(kw in candidate for kw in ["import", "torch", "nn.", "print"]):
+            return candidate
+
+    # Strategy 4: grab all lines that look like Python code
     lines = text.strip().split("\n")
     code_lines = []
     in_code = False
     for line in lines:
-        if re.match(r"^(import |from |model |#)", line):
+        stripped = line.strip()
+        # Triggers that indicate we've entered a code block
+        if re.match(r"^(import |from |model\s*=|x\s*=|output|torch\.|nn\.|print\()", stripped):
             in_code = True
         if in_code:
+            # Stop if we hit prose (lines with no code-like content)
+            if stripped and not re.match(
+                r"^(import |from |#|model|x|h|out|input|conv|pool|linear|print|torch|nn|shape|size|\w+\s*=)",
+                stripped
+            ) and len(stripped.split()) > 6 and stripped[0].islower():
+                break
             code_lines.append(line)
 
-    return "\n".join(code_lines) if code_lines else None
+    if code_lines and any("print" in l for l in code_lines):
+        return "\n".join(code_lines).strip()
+
+    return None

@@ -81,7 +81,23 @@ DIRECT_SYSTEM = (
 SANDBOX_SYSTEM = (
     "You are an expert deep learning engineer. "
     "Write a self-contained PyTorch script to compute the answer numerically. "
-    "Print ONLY the final value or shape. Do NOT print the answer letter."
+    "YOU MUST wrap your code in a ```python ... ``` fenced block. "
+    "Print ONLY the final value or shape using print(). Do NOT print the answer letter. "
+    "Example format:\n"
+    "```python\n"
+    "import torch\n"
+    "import torch.nn as nn\n"
+    "# compute here\n"
+    "print(output_shape)\n"
+    "```\n"
+    "After the code block, write NOTHING else."
+)
+COMPUTE_COT_SYSTEM = (
+    "You are an expert deep learning engineer. "
+    "The question requires numerical computation (e.g. tensor shapes, parameter counts). "
+    "Work through the math step by step, showing each formula and intermediate value clearly. "
+    "Then state the final answer as ONLY the single uppercase letter (A, B, C, or D). "
+    "Example: 'After conv: (64+2*1-3)/2+1 = 32. After pool: 32/2 = 16. Answer: A'"
 )
 MATCH_SYSTEM = (
     "You are given the output of a PyTorch computation and a multiple-choice question image. "
@@ -113,17 +129,44 @@ def is_computation_question(text: str) -> bool:
 
 
 def extract_code_block(text: str) -> Optional[str]:
-    m = re.search(r"```(?:python)?\s*\n(.*?)```", text, re.DOTALL)
+    # Strategy 1: standard ```python ... ``` fence
+    m = re.search(r"```python\s*\n(.*?)```", text, re.DOTALL)
     if m:
         return m.group(1).strip()
+
+    # Strategy 2: generic ``` ... ``` fence (no language tag)
+    m = re.search(r"```\s*\n(.*?)```", text, re.DOTALL)
+    if m:
+        candidate = m.group(1).strip()
+        if any(kw in candidate for kw in ["import", "torch", "nn.", "print"]):
+            return candidate
+
+    # Strategy 3: fence without newline after backticks
+    m = re.search(r"```(?:python)?(.*?)```", text, re.DOTALL)
+    if m:
+        candidate = m.group(1).strip()
+        if any(kw in candidate for kw in ["import", "torch", "nn.", "print"]):
+            return candidate
+
+    # Strategy 4: grab lines that look like Python code
     lines = text.strip().split("\n")
     code_lines, in_code = [], False
     for line in lines:
-        if re.match(r"^(import |from |model |nn\.|torch)", line):
+        stripped = line.strip()
+        if re.match(r"^(import |from |model\s*=|x\s*=|output|torch\.|nn\.|print\()", stripped):
             in_code = True
         if in_code:
+            if stripped and not re.match(
+                r"^(import |from |#|model|x|h|out|input|conv|pool|linear|print|torch|nn|shape|size|\w+\s*=)",
+                stripped
+            ) and len(stripped.split()) > 6 and stripped[0].islower():
+                break
             code_lines.append(line)
-    return "\n".join(code_lines) if code_lines else None
+
+    if code_lines and any("print" in l for l in code_lines):
+        return "\n".join(code_lines).strip()
+
+    return None
 
 
 def entropy_from_scores(scores: tuple) -> float:
@@ -293,18 +336,35 @@ def solve_direct(image: Image.Image, deadline: float,
     return {"answer": ans, "entropy": ent, "path": "direct"}
 
 
+def solve_compute_cot(image: Image.Image, deadline: float) -> dict:
+    """Chain-of-thought fallback for computation questions when sandbox fails."""
+    if time.time() > deadline:
+        return {"answer": None, "entropy": float("inf"), "path": "timeout"}
+    raw, ent = run_vlm(
+        image, COMPUTE_COT_SYSTEM,
+        "Work through the computation step by step. Show each formula and value. "
+        "End with: 'Answer: X' where X is A, B, C, or D.",
+        TEMPERATURE_GREEDY,
+    )
+    print(f"[cot] Raw: {raw!r}")
+    ans = parse_answer(raw)
+    print(f"[cot] Answer: {ans}  entropy: {ent:.3f}")
+    return {"answer": ans, "entropy": ent, "path": "compute_cot"}
+
+
 def solve_sandbox(image: Image.Image, deadline: float) -> dict:
     if time.time() > deadline:
         return {"answer": None, "entropy": float("inf"), "path": "timeout"}
 
     # Step 1: generate code
     code_text, ent1 = run_vlm(image, SANDBOX_SYSTEM,
-        "Write PyTorch code to compute the answer. Print ONLY the final value.",
+        "Write PyTorch code to compute the answer. "
+        "Wrap it in a ```python ... ``` block. Print ONLY the final value.",
         TEMPERATURE_GREEDY)
     code = extract_code_block(code_text)
     if not code:
-        print("[sandbox] No code extracted → fallback to direct")
-        return solve_direct(image, deadline, TEMPERATURE_GREEDY)
+        print("[sandbox] No code extracted → fallback to CoT")
+        return solve_compute_cot(image, deadline)
 
     print(f"[sandbox] Code:\n{code}")
 
@@ -315,8 +375,8 @@ def solve_sandbox(image: Image.Image, deadline: float) -> dict:
     print(f"[sandbox] Output: {exec_out}")
 
     if "[TIMEOUT]" in exec_out or "[STDERR]" in exec_out:
-        print("[sandbox] Error → fallback to direct")
-        return solve_direct(image, deadline, TEMPERATURE_GREEDY)
+        print("[sandbox] Execution error → fallback to CoT")
+        return solve_compute_cot(image, deadline)
 
     # Step 3: match output to option
     match_prompt = (

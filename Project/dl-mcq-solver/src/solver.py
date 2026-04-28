@@ -173,8 +173,8 @@ def _sandbox_answer(
 
     code = extract_code_block(code_text)
     if not code:
-        print("[sandbox] ⚠️  No code extracted — falling back to direct path")
-        return _direct_answer(model, processor, image, deadline, temperature=CFG.TEMPERATURE_GREEDY)
+        print("[sandbox] ⚠️  No code extracted — falling back to compute CoT")
+        return _solve_compute_cot(model, processor, image, deadline)
 
     print(f"[sandbox] Generated code:\n{code}\n")
 
@@ -186,8 +186,8 @@ def _sandbox_answer(
     print(f"[sandbox] Output: {exec_output}")
 
     if "[TIMEOUT]" in exec_output or "[STDERR]" in exec_output:
-        print("[sandbox] ⚠️  Execution error — falling back to direct path")
-        return _direct_answer(model, processor, image, deadline, temperature=CFG.TEMPERATURE_GREEDY)
+        print("[sandbox] ⚠️  Execution error — falling back to compute CoT")
+        return _solve_compute_cot(model, processor, image, deadline)
 
     # Step 3: match output to option (greedy — deterministic matching)
     match_prompt = (
@@ -210,6 +210,36 @@ def _sandbox_answer(
 
 
 # ─── Direct Path ──────────────────────────────────────────────────────────────
+
+def _solve_compute_cot(
+    model,
+    processor,
+    image: Image.Image,
+    deadline: float,
+) -> dict:
+    """
+    Chain-of-thought fallback for computation questions when sandbox fails.
+    Forces the model to show its math before committing to a letter.
+    Dramatically better than asking for a bare letter on shape/param questions.
+    """
+    if time.time() > deadline:
+        return {"answer": None, "entropy": float("inf"), "path": "timeout"}
+
+    raw_text, entropy = _run_vlm(
+        model, processor, image,
+        system_prompt=CFG.COMPUTE_COT_PROMPT,
+        user_prompt=(
+            "Work through the computation step by step. "
+            "Show each formula and intermediate value. "
+            "End with: 'Answer: X' where X is A, B, C, or D."
+        ),
+        temperature=CFG.TEMPERATURE_GREEDY,
+    )
+
+    print(f"[cot] Raw: {raw_text!r}")
+    answer = parse_answer(raw_text)
+    print(f"[cot] Answer: {answer}  Entropy: {entropy:.3f}")
+    return {"answer": answer, "entropy": entropy, "path": "compute_cot"}
 
 def _direct_answer(
     model,
