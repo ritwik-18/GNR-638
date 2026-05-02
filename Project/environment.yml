@@ -6,8 +6,6 @@ dependencies:
   - python=3.11
   - pip
   - pip:
-    - torch==2.4.0+cu126 --extra-index-url https://download.pytorch.org/whl/cu126
-    - torchvision --extra-index-url https://download.pytorch.org/whl/cu126
     - git+https://github.com/huggingface/transformers
     - accelerate>=0.34.0
     - qwen-vl-utils
@@ -17,4 +15,3 @@ dependencies:
     - sentencepiece
     - tiktoken
     - einops
-    - flash-attn
