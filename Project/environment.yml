@@ -6,8 +6,12 @@ dependencies:
   - python=3.11
   - pip
   - pip:
-    # torch is NOT here — installed separately in setup.bash with CUDA index URL
-    # mixing PyPI torch with torchvision causes torchvision::nms runtime error
+    # torch/torchvision/torchaudio are NOT here
+    # They are installed separately in setup.bash with:
+    #   pip install --force-reinstall torch torchvision torchaudio
+    #       --index-url https://download.pytorch.org/whl/cu126
+    # Installing torch from here (PyPI) causes:
+    #   RuntimeError: operator torchvision::nms does not exist
     - git+https://github.com/huggingface/transformers
     - accelerate>=0.34.0
     - qwen-vl-utils
