@@ -1,4 +1,4 @@
-name: gnr_project_env1
+name: gnr_project_env
 channels:
   - defaults
   - conda-forge
@@ -6,6 +6,8 @@ dependencies:
   - python=3.11
   - pip
   - pip:
+    # torch is NOT here — installed separately in setup.bash with CUDA index URL
+    # mixing PyPI torch with torchvision causes torchvision::nms runtime error
     - git+https://github.com/huggingface/transformers
     - accelerate>=0.34.0
     - qwen-vl-utils
